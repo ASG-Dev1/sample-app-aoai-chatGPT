@@ -4,6 +4,7 @@ import os
 import logging
 import uuid
 import httpx
+from func import list_blob_filenames_CDN_urls, find_text_in_pdf
 from quart import (
     Blueprint,
     Quart,
@@ -52,6 +53,71 @@ async def index():
         favicon=app_settings.ui.favicon
     )
 
+@bp.route("/filenames_cdn_urls", methods=["GET"])
+async def get_filenames_urls():
+    try:
+        container_name = 'webpage-ley73'
+        conn_str = "DefaultEndpointsProtocol=https;AccountName=strag062kuf;AccountKey=EqNTyx5pZE/S47jFROlCEMfFnmHRytCaZ8xNWo93ypsEIp+K0x6FXbz3a8RshCDAryqSsQVGn1HN+AStOBPyiw==;EndpointSuffix=core.windows.net"
+
+        # Debugging: Print connection string and container name
+        print(f"Connection String: {conn_str}")
+        print(f"Container Name: {container_name}")
+
+        if not conn_str:
+            raise ValueError("Connection string is not set")
+        if not container_name:
+            raise ValueError("Container name is not set")
+
+        filenames_with_urls = list_blob_filenames_CDN_urls(conn_str, container_name)
+        return jsonify(filenames_with_urls), 200
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 500
+
+# Test Joshua 
+@bp.route("/blob_name_cdn_url", methods=["GET"])
+def get_blob_url():
+    try:
+        container_name = 'webpage-ley73'
+        conn_str = "DefaultEndpointsProtocol=https;AccountName=strag062kuf;AccountKey=EqNTyx5pZE/S47jFROlCEMfFnmHRytCaZ8xNWo93ypsEIp+K0x6FXbz3a8RshCDAryqSsQVGn1HN+AStOBPyiw==;EndpointSuffix=core.windows.net"
+        blob_name = request.args.get('blob_name')
+        content = request.args.get('content')
+         
+        if not conn_str:
+            raise ValueError("Connection string is not set")
+        if not container_name:
+            raise ValueError("Container name is not set")
+        if not blob_name:
+            raise ValueError("Blob name is not provided")
+        if not content:
+            raise ValueError("Content is not provided")
+        
+        page_found = find_text_in_pdf(conn_str, container_name, blob_name,content)
+        print(page_found) 
+        
+        if page_found:
+            return jsonify({"page": page_found}), 200
+        else:
+            return jsonify({"error": "Blob not found"}), 404
+        
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 500
+
+# def get_filenames_urls():
+    # try:
+    #     container_name = 'webpage-ley73'
+    #     conn_str = os.environ.get("BLOB_CONNECTION_STRING_WEBPAGE_LEY73")
+    #     filenames_with_urls = list_blob_filenames_CDN_urls(conn_str, container_name)
+    #     return jsonify(filenames_with_urls), 200
+    # except Exception as ex:
+    #     return jsonify({"error": str(ex)}), 500
+
+# async def get_filenames_urls():
+#     try:
+#         container_name = 'webpage-ley73'
+#         conn_str = os.environ.get("BLOB_CONNECTION_STRING_WEBPAGE_LEY73")
+#         return await list_blob_filenames_CDN_urls(conn_str, container_name), 200
+#     except Exception as ex:
+#         return jsonify({"error": str(ex)}), 500
 
 @bp.route("/favicon.ico")
 async def favicon():
@@ -791,7 +857,6 @@ async def clear_messages():
     except Exception as e:
         logging.exception("Exception in /history/clear_messages")
         return jsonify({"error": str(e)}), 500
-
 
 @bp.route("/history/ensure", methods=["GET"])
 async def ensure_cosmos():

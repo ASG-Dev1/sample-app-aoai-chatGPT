@@ -26,7 +26,7 @@ import ChatHistoryList from './ChatHistoryList'
 
 import styles from './ChatHistoryPanel.module.css'
 
-interface ChatHistoryPanelProps {}
+interface ChatHistoryPanelProps { }
 
 export enum ChatHistoryPanelTabs {
   History = 'History'
@@ -52,11 +52,11 @@ export function ChatHistoryPanel(_props: ChatHistoryPanelProps) {
 
   const clearAllDialogContentProps = {
     type: DialogType.close,
-    title: !clearingError ? 'Are you sure you want to clear all chat history?' : 'Error deleting all of chat history',
+    title: !clearingError ? '¿Estás seguro de que quieres borrar todo el historial de chat?' : 'Error al eliminar todo el historial de chat',
     closeButtonAriaLabel: 'Close',
     subText: !clearingError
-      ? 'All chat history will be permanently removed.'
-      : 'Please try again. If the problem persists, please contact the site administrator.'
+      ? 'Todo el historial de chat se eliminará permanentemente.'
+      : 'Por favor inténtalo de nuevo. Si el problema persiste, comuníquese con el administrador del sitio.'
   }
 
   const modalProps = {
@@ -100,7 +100,8 @@ export function ChatHistoryPanel(_props: ChatHistoryPanelProps) {
     }, 2000)
   }
 
-  React.useEffect(() => {}, [appStateContext?.state.chatHistory, clearingError])
+  //Renders Chat History Panel and its items
+  React.useEffect(() => { }, [appStateContext?.state.chatHistory, clearingError])
 
   return (
     <section className={styles.container} data-is-scrollable aria-label={'chat history panel'}>
@@ -114,35 +115,74 @@ export function ChatHistoryPanel(_props: ChatHistoryPanelProps) {
               fontWeight: '600',
               fontSize: '18px',
               marginRight: 'auto',
-              paddingLeft: '20px'
+              paddingLeft: '20px',
+              color: "black"
             }}>
-            Chat history
+            Historial
           </Text>
         </StackItem>
         <Stack verticalAlign="start">
-          <Stack horizontal styles={commandBarButtonStyle}>
+          {/* Chat History Control buttons  */}
+          <Stack horizontal styles={commandBarButtonStyle} >
+
             <CommandBarButton
               iconProps={{ iconName: 'More' }}
-              title={'Clear all chat history'}
+              title={'Borrar todo el historia'}
               onClick={onShowContextualMenu}
               aria-label={'clear all chat history'}
-              styles={commandBarStyle}
+              styles={
+                { root: { backgroundColor: "#cbe5ff" },
+                  rootHovered: { backgroundColor: '#9ac4e3' },
+                  rootPressed: { backgroundColor: "#cbe1ff" },
+                  icon: { color: 'black' },
+                  iconHovered: { color: 'black' },
+                  iconPressed: { color: 'black' } }}
               role="button"
               id="moreButton"
             />
+
+            {/* Items in the more options button (...) drop down */}
             <ContextualMenu
               items={menuItems}
               hidden={!showContextualMenu}
               target={'#moreButton'}
               onItemClick={toggleClearAllDialog}
               onDismiss={onHideContextualMenu}
+              styles={{
+                subComponentStyles: {
+                  menuItem: {
+                    root: {
+                      backgroundColor: "#9ac4e3",
+                      color: "black",
+                      selectors: {
+                        ":hover": {
+                          backgroundColor: "#d6ecfb", color: "black",
+                          ".ms-ContextualMenu-icon": {
+                            color: "black",
+                          },
+                          ":active .ms-ContextualMenu-icon": {
+                            color: "black",
+                          }
+                        },
+                        ":active":{
+                          backgroundColor: "#9ac4e3"
+                        }
+                      }
+                    },
+                    rootPressed: { backgroundColor: "##9ac4e3" },
+                    icon: { color: "#000" },
+                  }
+                }
+              }}
             />
+
+            {/* X button */}
             <CommandBarButton
               iconProps={{ iconName: 'Cancel' }}
-              title={'Hide'}
+              title={'Esconder'}
               onClick={handleHistoryClick}
               aria-label={'hide button'}
-              styles={commandBarStyle}
+              styles={{ root: { backgroundColor: "#cbe5ff" }, rootHovered: { backgroundColor: '#9ac4e3' }, rootPressed: { backgroundColor: "#9ac4e3" }, icon: { color: 'black' }, iconHovered: { color: 'black' }, iconPressed: { color: 'black' } }}
               role="button"
             />
           </Stack>
@@ -175,16 +215,16 @@ export function ChatHistoryPanel(_props: ChatHistoryPanelProps) {
                 <Stack>
                   <Stack horizontalAlign="center" verticalAlign="center" style={{ width: '100%', marginTop: 10 }}>
                     <StackItem>
-                      <Text style={{ alignSelf: 'center', fontWeight: '400', fontSize: 16 }}>
+                      <Text style={{ alignSelf: 'center', fontWeight: '400', fontSize: 16, color: 'white' }}>
                         {appStateContext?.state.isCosmosDBAvailable?.status && (
                           <span>{appStateContext?.state.isCosmosDBAvailable?.status}</span>
                         )}
-                        {!appStateContext?.state.isCosmosDBAvailable?.status && <span>Error loading chat history</span>}
+                        {!appStateContext?.state.isCosmosDBAvailable?.status && <span>Error al cargar el historial de chat</span>}
                       </Text>
                     </StackItem>
                     <StackItem>
-                      <Text style={{ alignSelf: 'center', fontWeight: '400', fontSize: 14 }}>
-                        <span>Chat history can't be saved at this time</span>
+                      <Text style={{ alignSelf: 'center', fontWeight: '400', fontSize: 14, color: 'white' }}>
+                        <span>El historial de chat no se puede guardar en este momento</span>
                       </Text>
                     </StackItem>
                   </Stack>
@@ -206,8 +246,8 @@ export function ChatHistoryPanel(_props: ChatHistoryPanelProps) {
                     />
                   </StackItem>
                   <StackItem>
-                    <Text style={{ alignSelf: 'center', fontWeight: '400', fontSize: 14 }}>
-                      <span style={{ whiteSpace: 'pre-wrap' }}>Loading chat history</span>
+                    <Text style={{ alignSelf: 'center', fontWeight: '400', fontSize: 14, color: 'white' }}>
+                      <span style={{ whiteSpace: 'pre-wrap' }}>Cargando historial de chat</span>
                     </Text>
                   </StackItem>
                 </Stack>
@@ -218,15 +258,15 @@ export function ChatHistoryPanel(_props: ChatHistoryPanelProps) {
       </Stack>
       <Dialog
         hidden={hideClearAllDialog}
-        onDismiss={clearing ? () => {} : onHideClearAllDialog}
+        onDismiss={clearing ? () => { } : onHideClearAllDialog}
         dialogContentProps={clearAllDialogContentProps}
         modalProps={modalProps}>
         <DialogFooter>
-          {!clearingError && <PrimaryButton onClick={onClearAllChatHistory} disabled={clearing} text="Clear All" />}
+          {!clearingError && <PrimaryButton onClick={onClearAllChatHistory} disabled={clearing} text="Borrar todo" />}
           <DefaultButton
             onClick={onHideClearAllDialog}
             disabled={clearing}
-            text={!clearingError ? 'Cancel' : 'Close'}
+            text={!clearingError ? 'Cancelar' : 'Cerrar'}
           />
         </DialogFooter>
       </Dialog>

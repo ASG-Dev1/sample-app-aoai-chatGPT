@@ -27,7 +27,9 @@ cd ..
 echo ""
 echo "Starting backend"
 echo ""
-./.venv/bin/python -m quart run --port=50505 --host=127.0.0.1 --reload
+# ./.venv/bin/python -m uvicorn run --port=8000 --host=127.0.0.1 --reload
+./.venv/bin/python -m uvicorn app:app --port=8000 --host=127.0.0.1 --reload
+
 if [ $? -ne 0 ]; then
     echo "Failed to start backend"
     exit $?

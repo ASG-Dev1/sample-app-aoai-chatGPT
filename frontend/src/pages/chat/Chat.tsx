@@ -1,17 +1,19 @@
 import { useRef, useState, useEffect, useContext, useLayoutEffect } from 'react'
-import { CommandBarButton, IconButton, Dialog, DialogType, Stack } from '@fluentui/react'
-import { SquareRegular, ShieldLockRegular, ErrorCircleRegular } from '@fluentui/react-icons'
+import { CommandBarButton, IconButton, Dialog, DialogType, Stack, Separator } from '@fluentui/react'
+import { SquareRegular, ShieldLockRegular, ErrorCircleRegular} from '@fluentui/react-icons'
+import { BiSolidFilePdf } from "react-icons/bi";
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import uuid from 'react-uuid'
-import { isEmpty } from 'lodash'
+import { forEach, isEmpty } from 'lodash'
 import DOMPurify from 'dompurify'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { nord } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 import styles from './Chat.module.css'
+import css from '../../components/common/Button.module.css'
 import Contoso from '../../assets/Contoso.svg'
 import { XSSAllowTags } from '../../constants/xssAllowTags'
 
@@ -39,6 +41,7 @@ import { QuestionInput } from "../../components/QuestionInput";
 import { ChatHistoryPanel } from "../../components/ChatHistory/ChatHistoryPanel";
 import { AppStateContext } from "../../state/AppProvider";
 import { useBoolean } from "@fluentui/react-hooks";
+import PdfModal from '../../components/PdfModal/PdfModal'
 
 const enum messageStatus {
   NotRunning = 'Not Running',
@@ -64,7 +67,11 @@ const Chat = () => {
   const [clearingChat, setClearingChat] = useState<boolean>(false)
   const [hideErrorDialog, { toggle: toggleErrorDialog }] = useBoolean(true)
   const [errorMsg, setErrorMsg] = useState<ErrorMessage | null>()
+  const [selectedPdf, setSelectedPdf] = useState<{ name: string; url: string; page?: string } | null>(null);
+  const [showPdfModal, setShowPdfModal] = useState<boolean>(false);
 
+  const [pdfName, setPdfName] = useState("No name found");
+  const [pageList, setPageList] = useState<number[]>([]);
   const errorDialogContentProps = {
     type: DialogType.close,
     title: errorMsg?.title,
@@ -89,9 +96,9 @@ const Chat = () => {
       appStateContext?.state.chatHistoryLoadingState === ChatHistoryLoadingState.Fail &&
       hideErrorDialog
     ) {
-      let subtitle = `${appStateContext.state.isCosmosDBAvailable.status}. Please contact the site administrator.`
+      let subtitle = `${appStateContext.state.isCosmosDBAvailable.status}. Por favor contacte al administrador.`
       setErrorMsg({
-        title: 'Chat history is not enabled',
+        title: 'El historial de chat no está habilitado',
         subtitle: subtitle
       })
       toggleErrorDialog()
@@ -161,6 +168,7 @@ const Chat = () => {
   }
 
   const makeApiRequestWithoutCosmosDB = async (question: string, conversationId?: string) => {
+    console.log("NoCosmoQ:", question, "NoCosmoA:",conversationId )
     setIsLoading(true)
     setShowLoadingMessage(true)
     const abortController = new AbortController()
@@ -285,6 +293,7 @@ const Chat = () => {
   }
 
   const makeApiRequestWithCosmosDB = async (question: string, conversationId?: string) => {
+    console.log("WithCosmoQ:", question, "WithCosmoA:",conversationId )
     setIsLoading(true)
     setShowLoadingMessage(true)
     const abortController = new AbortController()
@@ -678,10 +687,33 @@ const Chat = () => {
     chatMessageStreamEnd.current?.scrollIntoView({ behavior: 'smooth' })
   }, [showLoadingMessage, processMessages])
 
+  // Displays the citation panel
   const onShowCitation = (citation: Citation) => {
+    setPdfName(citation.filepath || "Not found")
     setActiveCitation(citation)
+    fetchCitationPage(citation)
     setIsCitationPanelOpen(true)
   }
+
+  // Search for clicked reference and display the page of the citation
+const fetchCitationPage = async (citation: Citation) => {
+  try {
+    const filepath = citation.filepath || "";
+    const content = citation.content.substring(0, 80).replace(/\n/g, "").trim();
+    const response = await fetch(`/blob_name_cdn_url?blob_name=${encodeURIComponent(filepath)}&content=${encodeURIComponent(content)}`, {method: 'GET'});
+
+      if (!response.ok) {
+        // setPageFound("Page Not Found")
+      }
+      else{
+        const data = await response.json();
+        setPageList(data.page)
+      }
+
+  } catch (error) {
+      console.error('There was an issue sending your data:', error);
+  }
+}
 
   const onShowExecResult = () => {
     setIsIntentsPanelOpen(true)
@@ -733,6 +765,36 @@ const Chat = () => {
     )
   }
 
+  // Function to handle PDF opening
+const [isPressed, setIsPressed] = useState(false);
+
+const faq = (question: string) =>{
+   if (isLoading) return;
+  const conversation_id = appStateContext?.state.currentChat?.id;
+  appStateContext?.state.isCosmosDBAvailable?.cosmosDB
+  ? makeApiRequestWithCosmosDB(question, conversation_id)
+  : makeApiRequestWithoutCosmosDB(question, conversation_id);
+
+  setIsPressed(true);
+  setTimeout(() => {
+    setIsPressed(false);
+  }, 1000);
+};
+
+// Handle to Open Single PDF in Citation Panel
+  const handleOpenPdf = (citation: Citation, pageNum?: string) => {
+    console.log("Prueba en HandleOpenPDF: " + pageNum) 
+    if (citation.url) {
+      setSelectedPdf({ 
+        name: citation.title || "Unknown Title",
+        url: citation.url || "Unknown Url",
+        page: pageNum,
+      });
+      setShowPdfModal(true);
+    }
+  };
+
+  console.log(selectedPdf)
   return (
     <div className={styles.container} role="main">
       {showAuthMessage ? (
@@ -766,11 +828,45 @@ const Chat = () => {
         <Stack horizontal className={styles.chatRoot}>
           <div className={styles.chatContainer}>
             {!messages || messages.length < 1 ? (
-              <Stack className={styles.chatEmptyState}>
-                <img src={ui?.chat_logo ? ui.chat_logo : Contoso} className={styles.chatIcon} aria-hidden="true" />
-                <h1 className={styles.chatEmptyStateTitle}>{ui?.chat_title}</h1>
-                <h2 className={styles.chatEmptyStateSubtitle}>{ui?.chat_description}</h2>
-              </Stack>
+              <>
+                <Stack className={styles.chatEmptyState}>
+                  <img src={ui?.chat_logo ? ui.chat_logo : Contoso} className={styles.chatIcon} aria-hidden="true" />
+                  <h1 className={styles.chatEmptyStateTitle}>{ui?.chat_title}</h1>
+                  <h2 className={styles.chatEmptyStateSubtitle}>{ui?.chat_description}</h2>
+                </Stack>
+                <Stack className={styles.chatFaqOptions}>
+          <h2 className={styles.chatEmptyStateSubtitleFaq}>Realiza cualquier pregunta o escoge una de las siguientes opciones:</h2>
+          <ul className={styles.optionsNavList}>
+            <li>
+              <button
+              className={styles.faqOption}
+              onClick={() => faq('Ley 73 y otras leyes')}
+              style={{backgroundColor:isPressed ? 'rgb(74, 77, 150' : ''}}
+              >
+                <p className={styles.faqOptionText}>Ley 73</p>
+              </button>
+            </li>
+            <li>
+              <button
+              className={styles.faqOption}
+              onClick={() => faq('Subasta Formal')}
+              style={{backgroundColor:isPressed ? 'rgb(74, 77, 150' : ''}}
+              >
+                <p className={styles.faqOptionText}>Subasta Formal</p>
+              </button>
+            </li>
+            <li>
+              <button className={styles.faqOption}
+              onClick={() => faq('Compras de Emergencia y Compras Normales')}
+              style={{backgroundColor:isPressed ? 'rgb(74, 77, 150' : ''}}
+              >
+                <p className={styles.faqOptionText}>Compras de Emergencia y Compras Normales</p>
+              </button>
+            </li>
+          </ul>
+       
+        </Stack>
+              </>
             ) : (
               <div className={styles.chatMessageStream} style={{ marginBottom: isLoading ? '40px' : '0px' }} role="log">
                 {messages.map((answer, index) => (
@@ -797,8 +893,8 @@ const Chat = () => {
                     ) : answer.role === ERROR ? (
                       <div className={styles.chatMessageError}>
                         <Stack horizontal className={styles.chatMessageErrorContent}>
-                          <ErrorCircleRegular className={styles.errorIcon} style={{ color: 'rgba(182, 52, 67, 1)' }} />
-                          <span>Error</span>
+                          <ErrorCircleRegular className={styles.errorIcon} style={{ color: '#ff0000' }} />
+                          <div className={styles.chatMessageErrorTitle}><span >Error</span></div>
                         </Stack>
                         <span className={styles.chatMessageErrorContent}>{answer.content}</span>
                       </div>
@@ -810,7 +906,7 @@ const Chat = () => {
                     <div className={styles.chatMessageGpt}>
                       <Answer
                         answer={{
-                          answer: "Generating answer...",
+                          answer: "Generating an ANSWER...",
                           citations: [],
                           plotly_data: null
                         }}
@@ -826,9 +922,11 @@ const Chat = () => {
 
             <Stack horizontal className={styles.chatInput}>
               {isLoading && messages.length > 0 && (
+
+                // Stop Generating Button
                 <Stack
                   horizontal
-                  className={styles.stopGeneratingContainer}
+                  className={`${styles.stopGeneratingContainer} ${css.buttonStructure}`}
                   role="button"
                   aria-label="Stop generating"
                   tabIndex={0}
@@ -836,29 +934,44 @@ const Chat = () => {
                   onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? stopGenerating() : null)}>
                   <SquareRegular className={styles.stopGeneratingIcon} aria-hidden="true" />
                   <span className={styles.stopGeneratingText} aria-hidden="true">
-                    Stop generating
+                  Dejar de generar
                   </span>
                 </Stack>
               )}
               <Stack>
                 {appStateContext?.state.isCosmosDBAvailable?.status !== CosmosDBStatus.NotConfigured && (
+
+                  // + button to create a new chat
                   <CommandBarButton
                     role="button"
                     styles={{
                       icon: {
-                        color: '#FFFFFF'
+                        color: '#fff',
+                      },
+                      iconHovered: {
+                        color: '#fff',
+                      },
+                      iconPressed: {
+                        color: '#fff',
                       },
                       iconDisabled: {
-                        color: '#BDBDBD !important'
+                        color: '#6e6c6b',
                       },
                       root: {
-                        color: '#FFFFFF',
-                        background:
-                          'radial-gradient(109.81% 107.82% at 100.1% 90.19%, #0F6CBD 33.63%, #2D87C3 70.31%, #8DDDD8 100%)'
+                        color: '#000000',
+                        backgroundImage: 'linear-gradient(to bottom right, #47396a, #6b509e, #d19bd6 )',
+                        borderRadius: '10px !important' ,
+                      },
+                      rootHovered: {
+                        backgroundImage: 'linear-gradient(to top left, #47396a, #6b509e, #d19bd6 )',
+                        color: '#000000',
+                      },
+                      rootPressed: {
+                        backgroundColor: '#98ff00',
                       },
                       rootDisabled: {
-                        background: '#F0F0F0'
-                      }
+                        background: '#BDBDBD',
+                      },
                     }}
                     className={styles.newChatIcon}
                     iconProps={{ iconName: 'Add' }}
@@ -867,23 +980,38 @@ const Chat = () => {
                     aria-label="start a new chat button"
                   />
                 )}
+
+                {/* Broom button to delete chat */}
                 <CommandBarButton
                   role="button"
                   styles={{
                     icon: {
-                      color: '#FFFFFF'
+                      color: '#fff',
+                    },
+                    iconHovered: {
+                      color: '#fff',
+                    },
+                    iconPressed: {
+                      color: '#fff',
                     },
                     iconDisabled: {
-                      color: '#BDBDBD !important'
+                      color: '#6e6c6b',
                     },
                     root: {
-                      color: '#FFFFFF',
-                      background:
-                        'radial-gradient(109.81% 107.82% at 100.1% 90.19%, #0F6CBD 33.63%, #2D87C3 70.31%, #8DDDD8 100%)'
+                      color: '#000000',
+                      backgroundImage: 'linear-gradient(to bottom right, #47396a, #6b509e, #d19bd6 )',
+                      borderRadius: '10px !important',
+                    },
+                    rootHovered: {
+                      backgroundImage: 'linear-gradient(to top left, #47396a, #6b509e, #d19bd6 )',
+                      color: '#000000',
+                    },
+                    rootPressed: {
+                      backgroundColor: '#98ff00',
                     },
                     rootDisabled: {
-                      background: '#F0F0F0'
-                    }
+                      background: '#BDBDBD',
+                    },
                   }}
                   className={
                     appStateContext?.state.isCosmosDBAvailable?.status !== CosmosDBStatus.NotConfigured
@@ -907,9 +1035,10 @@ const Chat = () => {
               </Stack>
               <QuestionInput
                 clearOnSend
-                placeholder="Type a new question..."
+                placeholder="Escribe una pregunta..."
                 disabled={isLoading}
                 onSend={(question, id) => {
+                  console.log("Question on Send:", question, "Id on Send:",id )
                   appStateContext?.state.isCosmosDBAvailable?.cosmosDB
                     ? makeApiRequestWithCosmosDB(question, id)
                     : makeApiRequestWithoutCosmosDB(question, id)
@@ -920,6 +1049,7 @@ const Chat = () => {
               />
             </Stack>
           </div>
+
           {/* Citation Panel */}
           {messages && messages.length > 0 && isCitationPanelOpen && activeCitation && (
             <Stack.Item className={styles.citationPanel} tabIndex={0} role="tabpanel" aria-label="Citations Panel">
@@ -930,14 +1060,32 @@ const Chat = () => {
                 horizontalAlign="space-between"
                 verticalAlign="center">
                 <span aria-label="Citations" className={styles.citationPanelHeader}>
-                  Citations
+                  Citas
                 </span>
+
+                {/* X button in Citation Panel */}
                 <IconButton
+                  styles={{
+                    icon: {
+                      color: 'black',
+                    },
+                    iconHovered: {
+                      color: 'black',
+                    },
+                    rootHovered: {
+                      backgroundColor: '#9ac4e3',
+                    },
+                    rootPressed: {
+                      backgroundColor: '#9ac4e3',
+                    },
+                  }}
                   iconProps={{ iconName: 'Cancel' }}
                   aria-label="Close citations panel"
                   onClick={() => setIsCitationPanelOpen(false)}
                 />
               </Stack>
+
+                  {/* Citation Title */}
               <h5
                 className={styles.citationPanelTitle}
                 tabIndex={0}
@@ -958,8 +1106,53 @@ const Chat = () => {
                   rehypePlugins={[rehypeRaw]}
                 />
               </div>
+
+              {/* hr separator */}
+              <Separator
+                styles={{
+                  root: {
+                    width: '100%',
+                    position: 'relative',
+                    '::before': {
+                      backgroundColor: '#664c96'
+                    }
+                  }
+                }}
+              />
+
+              {/* Citation Panel Button to open PDF */}
+              <div onClick={() => handleOpenPdf(activeCitation)} className={`${css.citationPanelPDF} ${css.buttonStructure}`}>
+              <BiSolidFilePdf color="#fff" size="30px"/>
+                <span style={{fontStyle: "italic", marginLeft:"6px"}}>{pdfName}</span>
+              </div>
+
+              {/* Page btn where the citation is located */}
+              <div className={css.citationPageButtonContainer}>
+              <p>{pageList.length > 1 ? "Páginas: " : "Página: "}</p>
+              {pageList.map((value, index) => (
+                <button
+                key={index}
+                className={`${css.citationPdfPageButton} ${css.buttonStructure}`}
+                onClick={() => {
+                  handleOpenPdf(activeCitation, value.toString());
+                }}
+                > 
+                {pageList.length == 0 ? "Not found" : value}
+                </button>
+              ))}
+              </div>
             </Stack.Item>
           )}
+
+          {/* Single PDF Modal */}
+          {showPdfModal && selectedPdf && (
+            <PdfModal
+              isOpen={showPdfModal}
+              closeModal={() => setShowPdfModal(false)}
+              data={selectedPdf}
+            />
+          )}
+
           {messages && messages.length > 0 && isIntentsPanelOpen && (
             <Stack.Item className={styles.citationPanel} tabIndex={0} role="tabpanel" aria-label="Intents Panel">
               <Stack

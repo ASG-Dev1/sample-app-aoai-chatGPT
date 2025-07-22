@@ -2,9 +2,9 @@ import { FormEvent, useContext, useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { nord } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { Checkbox, DefaultButton, Dialog, FontIcon, Stack, Text } from '@fluentui/react'
+import { Checkbox, DefaultButton, Dialog, FontIcon, Icon, IconButton, Stack, Text } from '@fluentui/react'
 import { useBoolean } from '@fluentui/react-hooks'
-import { ThumbDislike20Filled, ThumbLike20Filled } from '@fluentui/react-icons'
+import { ThumbDislike20Filled, ThumbLike20Filled, Copy20Regular, Copy20Filled  } from '@fluentui/react-icons'
 import DOMPurify from 'dompurify'
 import remarkGfm from 'remark-gfm'
 import supersub from 'remark-supersub'
@@ -17,13 +17,18 @@ import { parseAnswer } from './AnswerParser'
 
 import styles from './Answer.module.css'
 
+
 interface Props {
   answer: AskResponse
   onCitationClicked: (citedDocument: Citation) => void
   onExectResultClicked: () => void
 }
 
-export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Props) => {
+ 
+
+// End Test Joshua
+
+export const Answer = ({ answer, onCitationClicked, onExectResultClicked, }: Props) => {
   const initializeAnswerFeedback = (answer: AskResponse) => {
     if (answer.message_id == undefined) return undefined
     if (answer.feedback == undefined) return undefined
@@ -124,6 +129,23 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
       type: 'SET_FEEDBACK_STATE',
       payload: { answerId: answer.message_id, feedback: newFeedbackState }
     })
+  }
+
+  const [isCopied, setIsCopied] = useState(false);
+
+  // Access the Props properties when copy button click and copy the text to clipboard
+  function copyButton(){
+    navigator.clipboard.writeText(answer.answer);
+    // console.log("Answer " , answer.answer);
+    // console.log("MessageId: " , answer.message_id);
+
+    // Set the copied state to true
+    setIsCopied(true);
+
+    // Reset the copied state after 2 seconds
+    setTimeout(() => {
+      setIsCopied(false);
+    }, 1000);
   }
 
   const updateFeedbackList = (ev?: FormEvent<HTMLElement | HTMLInputElement>, checked?: boolean) => {
@@ -227,6 +249,7 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
     )
   }
 
+
   const components = {
     code({ node, ...props }: { node: any;[key: string]: any }) {
       let language
@@ -263,6 +286,8 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
             <Stack.Item className={styles.answerHeader}>
               {FEEDBACK_ENABLED && answer.message_id !== undefined && (
                 <Stack horizontal horizontalAlign="space-between">
+
+                  {/* Answer Like button */}
                   <ThumbLike20Filled
                     aria-hidden="false"
                     aria-label="Like this response"
@@ -274,6 +299,8 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
                         : { color: 'slategray', cursor: 'pointer' }
                     }
                   />
+
+                  {/* Answer Dislike button */}
                   <ThumbDislike20Filled
                     aria-hidden="false"
                     aria-label="Dislike this response"
@@ -286,18 +313,41 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
                         : { color: 'slategray', cursor: 'pointer' }
                     }
                   />
+                  {/* Copy AnswerResponse Button */}
+                    {isCopied ? (
+                    <Copy20Filled
+                      aria-hidden="false"
+                      aria-label="Text copied"
+                      onClick={copyButton}
+                      style={{
+                        color: '#664c96', // Color for when the text is copied
+                        cursor: 'pointer'
+                      }}
+                    />
+                  ) : (
+                    <Copy20Regular
+                      aria-hidden="false"
+                      aria-label="Copy this response"
+                      onClick={copyButton}
+                      style={{
+                        color: '#664c96', // Default color
+                        cursor: 'pointer'
+                      }}
+                    />
+                  )}
                 </Stack>
               )}
             </Stack.Item>
           </Stack>
         </Stack.Item>
         {parsedAnswer.plotly_data !== null && (
-          <Stack className={styles.answerContainer}>
+          <Stack className={styles.answerContainer} >
             <Stack.Item grow>
-              <Plot data={parsedAnswer.plotly_data.data} layout={parsedAnswer.plotly_data.layout} />
+              <Plot data={parsedAnswer.plotly_data.data} layout={parsedAnswer.plotly_data.layout}/>
             </Stack.Item>
           </Stack>
         )}
+        {/* Quantity of PDF references */}
         <Stack horizontal className={styles.answerFooter}>
           {!!parsedAnswer.citations.length && (
             <Stack.Item onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? toggleIsRefAccordionOpen() : null)}>
@@ -311,8 +361,8 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
                     role="button">
                     <span>
                       {parsedAnswer.citations.length > 1
-                        ? parsedAnswer.citations.length + ' references'
-                        : '1 reference'}
+                        ? parsedAnswer.citations.length + ' referencias'
+                        : '1 referencia'}
                     </span>
                   </Text>
                   <FontIcon
@@ -325,7 +375,7 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
             </Stack.Item>
           )}
           <Stack.Item className={styles.answerDisclaimerContainer}>
-            <span className={styles.answerDisclaimer}>AI-generated content may be incorrect</span>
+            <span className={styles.answerDisclaimer}>El contenido generado por IA puede ser incorrecto</span>
           </Stack.Item>
           {!!answer.exec_results?.length && (
             <Stack.Item onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? toggleIsRefAccordionOpen() : null)}>

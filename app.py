@@ -4,6 +4,7 @@ import os
 import logging
 import uuid
 import httpx
+from func import list_blob_filenames_CDN_urls, find_text_in_pdf
 from quart import (
     Blueprint,
     Quart,
@@ -15,16 +16,13 @@ from quart import (
 )
 
 from openai import AsyncAzureOpenAI
-from azure.identity.aio import (
-    DefaultAzureCredential,
-    get_bearer_token_provider
-)
+from azure.identity.aio import DefaultAzureCredential, get_bearer_token_provider
 from backend.auth.auth_utils import get_authenticated_user_details
 from backend.security.ms_defender_utils import get_msdefender_user_json
 from backend.history.cosmosdbservice import CosmosConversationClient
 from backend.settings import (
     app_settings,
-    MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION
+    MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION,
 )
 from backend.utils import (
     format_as_ndjson,
@@ -39,6 +37,7 @@ bp = Blueprint("routes", __name__, static_folder="static", template_folder="stat
 
 def create_app():
     app = Quart(__name__)
+    app.config["PROVIDE_AUTOMATIC_OPTIONS"] = True
     app.register_blueprint(bp)
     app.config["TEMPLATES_AUTO_RELOAD"] = True
     return app
@@ -47,10 +46,77 @@ def create_app():
 @bp.route("/")
 async def index():
     return await render_template(
-        "index.html",
-        title=app_settings.ui.title,
-        favicon=app_settings.ui.favicon
+        "index.html", title=app_settings.ui.title, favicon=app_settings.ui.favicon
     )
+
+
+@bp.route("/filenames_cdn_urls", methods=["GET"])
+async def get_filenames_urls():
+    try:
+        container_name = "webpage-ley73"
+        conn_str = "DefaultEndpointsProtocol=https;AccountName=strag062kuf;AccountKey=EqNTyx5pZE/S47jFROlCEMfFnmHRytCaZ8xNWo93ypsEIp+K0x6FXbz3a8RshCDAryqSsQVGn1HN+AStOBPyiw==;EndpointSuffix=core.windows.net"
+
+        # Debugging: Print connection string and container name
+        print(f"Connection String: {conn_str}")
+        print(f"Container Name: {container_name}")
+
+        if not conn_str:
+            raise ValueError("Connection string is not set")
+        if not container_name:
+            raise ValueError("Container name is not set")
+
+        filenames_with_urls = list_blob_filenames_CDN_urls(conn_str, container_name)
+        return jsonify(filenames_with_urls), 200
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 500
+
+
+# Test Joshua
+@bp.route("/blob_name_cdn_url", methods=["GET"])
+def get_blob_url():
+    try:
+        container_name = "webpage-ley73"
+        conn_str = "DefaultEndpointsProtocol=https;AccountName=strag062kuf;AccountKey=EqNTyx5pZE/S47jFROlCEMfFnmHRytCaZ8xNWo93ypsEIp+K0x6FXbz3a8RshCDAryqSsQVGn1HN+AStOBPyiw==;EndpointSuffix=core.windows.net"
+        blob_name = request.args.get("blob_name")
+        content = request.args.get("content")
+
+        if not conn_str:
+            raise ValueError("Connection string is not set")
+        if not container_name:
+            raise ValueError("Container name is not set")
+        if not blob_name:
+            raise ValueError("Blob name is not provided")
+        if not content:
+            raise ValueError("Content is not provided")
+
+        page_found = find_text_in_pdf(conn_str, container_name, blob_name, content)
+        print(page_found)
+
+        if page_found:
+            return jsonify({"page": page_found}), 200
+        else:
+            return jsonify({"error": "Blob not found"}), 404
+
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 500
+
+
+# def get_filenames_urls():
+# try:
+#     container_name = 'webpage-ley73'
+#     conn_str = os.environ.get("BLOB_CONNECTION_STRING_WEBPAGE_LEY73")
+#     filenames_with_urls = list_blob_filenames_CDN_urls(conn_str, container_name)
+#     return jsonify(filenames_with_urls), 200
+# except Exception as ex:
+#     return jsonify({"error": str(ex)}), 500
+
+# async def get_filenames_urls():
+#     try:
+#         container_name = 'webpage-ley73'
+#         conn_str = os.environ.get("BLOB_CONNECTION_STRING_WEBPAGE_LEY73")
+#         return await list_blob_filenames_CDN_urls(conn_str, container_name), 200
+#     except Exception as ex:
+#         return jsonify({"error": str(ex)}), 500
 
 
 @bp.route("/favicon.ico")
@@ -75,8 +141,7 @@ USER_AGENT = "GitHubSampleWebApp/AsyncAzureOpenAI/1.0.0"
 frontend_settings = {
     "auth_enabled": app_settings.base_settings.auth_enabled,
     "feedback_enabled": (
-        app_settings.chat_history and
-        app_settings.chat_history.enable_feedback
+        app_settings.chat_history and app_settings.chat_history.enable_feedback
     ),
     "ui": {
         "title": app_settings.ui.title,
@@ -109,8 +174,8 @@ def init_openai_client():
 
         # Endpoint
         if (
-            not app_settings.azure_openai.endpoint and
-            not app_settings.azure_openai.resource
+            not app_settings.azure_openai.endpoint
+            and not app_settings.azure_openai.resource
         ):
             raise ValueError(
                 "AZURE_OPENAI_ENDPOINT or AZURE_OPENAI_RESOURCE is required"
@@ -189,25 +254,19 @@ def prepare_model_args(request_body, request_headers):
     messages = []
     if not app_settings.datasource:
         messages = [
-            {
-                "role": "system",
-                "content": app_settings.azure_openai.system_message
-            }
+            {"role": "system", "content": app_settings.azure_openai.system_message}
         ]
 
     for message in request_messages:
         if message:
-            messages.append(
-                {
-                    "role": message["role"],
-                    "content": message["content"]
-                }
-            )
+            messages.append({"role": message["role"], "content": message["content"]})
 
     user_json = None
-    if (MS_DEFENDER_ENABLED):
+    if MS_DEFENDER_ENABLED:
         authenticated_user_details = get_authenticated_user_details(request_headers)
-        user_json = get_msdefender_user_json(authenticated_user_details, request_headers)
+        user_json = get_msdefender_user_json(
+            authenticated_user_details, request_headers
+        )
 
     model_args = {
         "messages": messages,
@@ -217,15 +276,13 @@ def prepare_model_args(request_body, request_headers):
         "stop": app_settings.azure_openai.stop_sequence,
         "stream": app_settings.azure_openai.stream,
         "model": app_settings.azure_openai.model,
-        "user": user_json
+        "user": user_json,
     }
 
     if app_settings.datasource:
         model_args["extra_body"] = {
             "data_sources": [
-                app_settings.datasource.construct_payload_configuration(
-                    request=request
-                )
+                app_settings.datasource.construct_payload_configuration(request=request)
             ]
         }
 
@@ -282,14 +339,16 @@ async def promptflow_request(request):
             pf_formatted_obj = convert_to_pf_format(
                 request,
                 app_settings.promptflow.request_field_name,
-                app_settings.promptflow.response_field_name
+                app_settings.promptflow.response_field_name,
             )
             # NOTE: This only support question and chat_history parameters
             # If you need to add more parameters, you need to modify the request body
             response = await client.post(
                 app_settings.promptflow.endpoint,
                 json={
-                    app_settings.promptflow.request_field_name: pf_formatted_obj[-1]["inputs"][app_settings.promptflow.request_field_name],
+                    app_settings.promptflow.request_field_name: pf_formatted_obj[-1][
+                        "inputs"
+                    ][app_settings.promptflow.request_field_name],
                     "chat_history": pf_formatted_obj[:-1],
                 },
                 headers=headers,
@@ -305,17 +364,21 @@ async def send_chat_request(request_body, request_headers):
     filtered_messages = []
     messages = request_body.get("messages", [])
     for message in messages:
-        if message.get("role") != 'tool':
+        if message.get("role") != "tool":
             filtered_messages.append(message)
-            
-    request_body['messages'] = filtered_messages
+
+    request_body["messages"] = filtered_messages
     model_args = prepare_model_args(request_body, request_headers)
 
     try:
         azure_openai_client = init_openai_client()
-        raw_response = await azure_openai_client.chat.completions.with_raw_response.create(**model_args)
+        raw_response = (
+            await azure_openai_client.chat.completions.with_raw_response.create(
+                **model_args
+            )
+        )
         response = raw_response.parse()
-        apim_request_id = raw_response.headers.get("apim-request-id") 
+        apim_request_id = raw_response.headers.get("apim-request-id")
     except Exception as e:
         logging.exception("Exception in send_chat_request")
         raise e
@@ -331,21 +394,27 @@ async def complete_chat_request(request_body, request_headers):
             response,
             history_metadata,
             app_settings.promptflow.response_field_name,
-            app_settings.promptflow.citations_field_name
+            app_settings.promptflow.citations_field_name,
         )
     else:
-        response, apim_request_id = await send_chat_request(request_body, request_headers)
+        response, apim_request_id = await send_chat_request(
+            request_body, request_headers
+        )
         history_metadata = request_body.get("history_metadata", {})
-        return format_non_streaming_response(response, history_metadata, apim_request_id)
+        return format_non_streaming_response(
+            response, history_metadata, apim_request_id
+        )
 
 
 async def stream_chat_request(request_body, request_headers):
     response, apim_request_id = await send_chat_request(request_body, request_headers)
     history_metadata = request_body.get("history_metadata", {})
-    
+
     async def generate():
         async for completionChunk in response:
-            yield format_stream_response(completionChunk, history_metadata, apim_request_id)
+            yield format_stream_response(
+                completionChunk, history_metadata, apim_request_id
+            )
 
     return generate()
 
@@ -848,7 +917,10 @@ async def generate_title(conversation_messages):
     try:
         azure_openai_client = init_openai_client(use_data=False)
         response = await azure_openai_client.chat.completions.create(
-            model=app_settings.azure_openai.model, messages=messages, temperature=1, max_tokens=64
+            model=app_settings.azure_openai.model,
+            messages=messages,
+            temperature=1,
+            max_tokens=64,
         )
 
         title = json.loads(response.choices[0].message.content)["title"]
